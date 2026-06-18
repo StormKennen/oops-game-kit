@@ -7,6 +7,7 @@ export interface PlantRecord {
     seedCost: number;
     expReward: number;
     baseYield: number;
+    requireLevel: number;
 }
 
 export class TablePlant {
@@ -19,6 +20,7 @@ export class TablePlant {
         seedCost: 0,
         expReward: 0,
         baseYield: 1,
+        requireLevel: 1,
     };
 
     static get(id: number): PlantRecord | null {
@@ -56,5 +58,8 @@ export class TablePlant {
     }
     get baseYield(): number {
         return this.data.baseYield;
+    }
+    get requireLevel(): number {
+        return this.data.requireLevel;
     }
 }

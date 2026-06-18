@@ -25,18 +25,23 @@ export class MainFarmViewComp extends CCView<Farm> {
     @property(Label)
     labelRealm: Label | null = null;
 
+    @property(Label)
+    labelChatMarquee: Label | null = null;
+
     start() {
         this.refreshUserInfo();
         this.refreshAllLands();
         oops.message.on(GameEvent.UserDataChanged, this.onUserDataChanged, this);
         oops.message.on(GameEvent.RoleLevelUp, this.onRoleLevelUp, this);
         oops.message.on(GameEvent.LandRefresh, this.onLandRefresh, this);
+        oops.message.on(GameEvent.XianChatBroadcast, this.onXianChatBroadcast, this);
     }
 
     protected onDestroy() {
         oops.message.off(GameEvent.UserDataChanged, this.onUserDataChanged, this);
         oops.message.off(GameEvent.RoleLevelUp, this.onRoleLevelUp, this);
         oops.message.off(GameEvent.LandRefresh, this.onLandRefresh, this);
+        oops.message.off(GameEvent.XianChatBroadcast, this.onXianChatBroadcast, this);
     }
 
     private onUserDataChanged(_event: string, _args: unknown) {
@@ -51,6 +56,11 @@ export class MainFarmViewComp extends CCView<Farm> {
     private onLandRefresh(_event: string, landId: unknown) {
         if (typeof landId !== "number") return;
         this.refreshLand(landId);
+    }
+
+    private onXianChatBroadcast(_event: string, message: unknown) {
+        if (typeof message !== "string") return;
+        this.refreshChatMarquee(message);
     }
 
     private refreshUserInfo(): void {
@@ -76,6 +86,10 @@ export class MainFarmViewComp extends CCView<Farm> {
         if (!slot) return;
         const unlocked = landId <= FarmController.inst.getMaxLandCount();
         void unlocked;
+    }
+
+    private refreshChatMarquee(message: string): void {
+        if (this.labelChatMarquee) this.labelChatMarquee.string = message;
     }
 
     onLandClick(landId: number, selectedPlantId: number): void {

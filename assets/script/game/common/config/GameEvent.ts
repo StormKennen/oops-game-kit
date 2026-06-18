@@ -6,4 +6,6 @@ export enum GameEvent {
     OrderRefresh = "OrderRefresh",
     RoleLevelUp = "RoleLevelUp",
     FloatingTip = "FloatingTip",
+    SubsidyAvailable = "SubsidyAvailable",
+    XianChatBroadcast = "XianChatBroadcast",
 }

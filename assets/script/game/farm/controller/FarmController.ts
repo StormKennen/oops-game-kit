@@ -12,6 +12,8 @@ const ORDER_COUNT = 3;
 const OFFLINE_BONUS_RATE = 0.1;
 const TIMESTAMP_SAVE_INTERVAL = 60;
 const ORDER_REFRESH_COST = 50;
+const SUBSIDY_THRESHOLD = 50;
+const SUBSIDY_REWARD_STONE = 500;
 
 export interface IActiveOrder {
     orderId: number;
@@ -38,6 +40,7 @@ export class FarmController {
 
     private initialized: boolean = false;
     private saveTicker: number = 0;
+    private subsidyPending: boolean = false;
 
     private constructor() { }
 
@@ -95,7 +98,14 @@ export class FarmController {
         const cfg = TablePlant.get(plantId);
         if (!slot || !cfg) return false;
         if (slot.status !== LandStatus.EMPTY) return false;
-        if (farm.XianUser.spiritStone < cfg.seedCost) return false;
+        if (farm.XianUser.level < cfg.requireLevel) {
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "\u4fee\u58eb\u5883\u754c\u4e0d\u8db3\uff0c\u5f3a\u884c\u79cd\u690d\u6050\u906d\u53cd\u566c");
+            return false;
+        }
+        if (farm.XianUser.spiritStone < cfg.seedCost) {
+            this.checkAndGrantSubsidies();
+            return false;
+        }
 
         farm.XianUser.spiritStone -= cfg.seedCost;
         slot.status = LandStatus.PLANTED;
@@ -194,7 +204,10 @@ export class FarmController {
     refreshOrdersWithStone(orderId?: number): boolean {
         const farm = smc.farm;
         if (!farm) return false;
-        if (farm.XianUser.spiritStone < ORDER_REFRESH_COST) return false;
+        if (farm.XianUser.spiritStone < ORDER_REFRESH_COST) {
+            this.checkAndGrantSubsidies();
+            return false;
+        }
 
         this.ensureOrders();
         const index = orderId === undefined
@@ -216,6 +229,31 @@ export class FarmController {
         return true;
     }
 
+
+    checkAndGrantSubsidies(): boolean {
+        const farm = smc.farm;
+        if (!farm || this.subsidyPending) return false;
+        if (farm.XianUser.spiritStone >= SUBSIDY_THRESHOLD) return false;
+        if (this.hasAnyBagItem()) return false;
+
+        this.subsidyPending = true;
+        oops.message.dispatchEvent(GameEvent.FloatingTip, "\u4ed9\u7f18\u5929\u964d");
+        oops.message.dispatchEvent(GameEvent.SubsidyAvailable);
+        XianSdkManager.showRewardVideoAd(() => {
+            const currentFarm = smc.farm;
+            this.subsidyPending = false;
+            if (!currentFarm) return;
+            currentFarm.XianUser.spiritStone += SUBSIDY_REWARD_STONE;
+            this.saveGameState();
+            oops.message.dispatchEvent(GameEvent.UserDataChanged);
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "\u4ed9\u7f18\u5929\u964d\uff0c\u83b7\u5f97500\u7075\u77f3");
+        }, () => {
+            this.subsidyPending = false;
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "Reward video failed");
+        });
+        return true;
+    }
+
     getActiveOrders(): IActiveOrder[] {
         this.ensureOrders();
         return this.activeOrders;
@@ -233,6 +271,13 @@ export class FarmController {
         const level = farm?.XianUser.level ?? 1;
         const cfg = TableRoleExp.get(level);
         return cfg?.title ?? "";
+    }
+
+
+    private hasAnyBagItem(): boolean {
+        const farm = smc.farm;
+        if (!farm) return false;
+        return Object.values(farm.XianUser.bag).some(count => count > 0);
     }
 
     private applyOfflineProgress(): void {
