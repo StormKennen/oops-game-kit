@@ -2,11 +2,16 @@ import { oops } from "db://oops-framework/core/Oops";
 import { GameEvent } from "../../common/config/GameEvent";
 import { GameStorageConfig } from "../../common/config/GameStorageConfig";
 import { TableOrder } from "../../common/table/TableOrder";
-import { TablePlant } from "../../common/table/TablePlant";
+import { TablePlant, PlantRecord } from "../../common/table/TablePlant";
+import { TableRoleExp } from "../../common/table/TableRoleExp";
 import { smc } from "../../common/SingletonModuleComp";
-import { LandStatus } from "../model/XianLand";
+import { LandStatus, ILandSlot } from "../model/XianLand";
+import { XianSdkManager } from "../sdk/XianSdkManager";
 
 const ORDER_COUNT = 3;
+const OFFLINE_BONUS_RATE = 0.1;
+const TIMESTAMP_SAVE_INTERVAL = 60;
+const ORDER_REFRESH_COST = 50;
 
 export interface IActiveOrder {
     orderId: number;
@@ -32,6 +37,7 @@ export class FarmController {
     activeOrders: IActiveOrder[] = [];
 
     private initialized: boolean = false;
+    private saveTicker: number = 0;
 
     private constructor() { }
 
@@ -39,13 +45,15 @@ export class FarmController {
         if (this.initialized) return;
         this.initialized = true;
         this.loadOrders();
+        this.applyOfflineProgress();
+        this.saveOfflineTimestamp(this.now());
     }
 
-    update(_dt: number): void {
+    update(dt: number): void {
         const farm = smc.farm;
         if (!farm) return;
 
-        const now = Math.floor(Date.now() / 1000);
+        const now = this.now();
         let changed = false;
 
         for (const slot of farm.XianLand.slots) {
@@ -55,18 +63,33 @@ export class FarmController {
             if (!cfg) continue;
 
             if (now - slot.startTime >= cfg.growTime) {
-                slot.status = LandStatus.MATURE;
+                this.makeMature(slot, 0);
                 changed = true;
                 oops.message.dispatchEvent(GameEvent.LandRefresh, slot.landId);
             }
         }
 
         if (changed) farm.XianLand.save();
+
+        this.saveTicker += dt;
+        if (this.saveTicker >= TIMESTAMP_SAVE_INTERVAL) {
+            this.saveTicker = 0;
+            this.saveOfflineTimestamp(now);
+        }
+    }
+
+    shutdown(): void {
+        this.saveOfflineTimestamp(this.now());
     }
 
     plantSeed(landId: number, plantId: number): boolean {
         const farm = smc.farm;
         if (!farm) return false;
+
+        if (landId > this.getMaxLandCount()) {
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "Land locked by current realm");
+            return false;
+        }
 
         const slot = farm.XianLand.getSlot(landId);
         const cfg = TablePlant.get(plantId);
@@ -77,10 +100,10 @@ export class FarmController {
         farm.XianUser.spiritStone -= cfg.seedCost;
         slot.status = LandStatus.PLANTED;
         slot.plantId = plantId;
-        slot.startTime = Math.floor(Date.now() / 1000);
+        slot.startTime = this.now();
+        slot.offlineBonusCount = 0;
 
-        farm.XianUser.save();
-        farm.XianLand.save();
+        this.saveGameState();
         oops.message.dispatchEvent(GameEvent.UserDataChanged);
         oops.message.dispatchEvent(GameEvent.LandRefresh, landId);
         return true;
@@ -97,15 +120,18 @@ export class FarmController {
         if (!cfg) return;
 
         const plantId = slot.plantId;
-        farm.XianUser.bag[plantId] = (farm.XianUser.bag[plantId] || 0) + 1;
+        const baseYield = this.getBaseYield(cfg);
+        const count = Math.min(baseYield + slot.offlineBonusCount, baseYield * 2);
+        farm.XianUser.bag[plantId] = (farm.XianUser.bag[plantId] || 0) + count;
         farm.XianUser.exp += cfg.expReward;
+        this.tryLevelUp();
 
         slot.status = LandStatus.EMPTY;
         slot.plantId = 0;
         slot.startTime = 0;
+        slot.offlineBonusCount = 0;
 
-        farm.XianUser.save();
-        farm.XianLand.save();
+        this.saveGameState();
         oops.message.dispatchEvent(GameEvent.UserDataChanged);
         oops.message.dispatchEvent(GameEvent.LandRefresh, landId);
     }
@@ -124,9 +150,9 @@ export class FarmController {
 
         farm.XianUser.bag[order.requirePlantId] = have - order.requireCount;
         farm.XianUser.spiritStone += order.rewardStone;
-        farm.XianUser.save();
 
         this.activeOrders[index] = this.randomOrder();
+        this.saveGameState();
         this.saveOrders();
 
         oops.message.dispatchEvent(GameEvent.UserDataChanged);
@@ -135,24 +161,176 @@ export class FarmController {
     }
 
     speedUpLand(landId: number): void {
+        XianSdkManager.showRewardVideoAd(() => {
+            if (this.forceMatureLand(landId)) {
+                this.saveGameState();
+                oops.message.dispatchEvent(GameEvent.LandRefresh, landId);
+            }
+        }, () => {
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "Reward video failed");
+        });
+    }
+
+    speedUpAllLands(): void {
         const farm = smc.farm;
         if (!farm) return;
 
-        const slot = farm.XianLand.getSlot(landId);
-        if (!slot || slot.status !== LandStatus.PLANTED) return;
+        const landIds = farm.XianLand.slots
+            .filter(slot => slot.status === LandStatus.PLANTED)
+            .map(slot => slot.landId);
+        if (landIds.length === 0) return;
 
-        const cfg = TablePlant.get(slot.plantId);
-        if (!cfg) return;
+        XianSdkManager.showRewardVideoAd(() => {
+            for (const landId of landIds) {
+                this.forceMatureLand(landId);
+                oops.message.dispatchEvent(GameEvent.LandRefresh, landId);
+            }
+            this.saveGameState();
+        }, () => {
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "Reward video failed");
+        });
+    }
 
-        slot.startTime = Math.floor(Date.now() / 1000) - cfg.growTime;
-        slot.status = LandStatus.MATURE;
-        farm.XianLand.save();
-        oops.message.dispatchEvent(GameEvent.LandRefresh, landId);
+    refreshOrdersWithStone(orderId?: number): boolean {
+        const farm = smc.farm;
+        if (!farm) return false;
+        if (farm.XianUser.spiritStone < ORDER_REFRESH_COST) return false;
+
+        this.ensureOrders();
+        const index = orderId === undefined
+            ? -1
+            : this.activeOrders.findIndex(order => order.orderId === orderId);
+        if (orderId !== undefined && index < 0) return false;
+
+        farm.XianUser.spiritStone -= ORDER_REFRESH_COST;
+        if (orderId === undefined) {
+            this.activeOrders = this.activeOrders.map(() => this.randomOrder());
+        } else {
+            this.activeOrders[index] = this.randomOrder();
+        }
+
+        this.saveGameState();
+        this.saveOrders();
+        oops.message.dispatchEvent(GameEvent.UserDataChanged);
+        oops.message.dispatchEvent(GameEvent.OrderRefresh);
+        return true;
     }
 
     getActiveOrders(): IActiveOrder[] {
         this.ensureOrders();
         return this.activeOrders;
+    }
+
+    getMaxLandCount(): number {
+        const farm = smc.farm;
+        const level = farm?.XianUser.level ?? 1;
+        const cfg = TableRoleExp.get(level);
+        return cfg?.maxLandCount ?? 3;
+    }
+
+    getRoleTitle(): string {
+        const farm = smc.farm;
+        const level = farm?.XianUser.level ?? 1;
+        const cfg = TableRoleExp.get(level);
+        return cfg?.title ?? "";
+    }
+
+    private applyOfflineProgress(): void {
+        const farm = smc.farm;
+        if (!farm) return;
+
+        const now = this.now();
+        const last = farm.XianUser.lastOfflineTime;
+        if (last <= 0 || now <= last) return;
+
+        let changed = false;
+        for (const slot of farm.XianLand.slots) {
+            if (slot.status !== LandStatus.PLANTED) continue;
+
+            const cfg = TablePlant.get(slot.plantId);
+            if (!cfg) continue;
+
+            const matureAt = slot.startTime + cfg.growTime;
+            if (matureAt <= now) {
+                const bonus = this.rollOfflineBonus(now, matureAt, cfg);
+                this.makeMature(slot, bonus);
+                changed = true;
+                oops.message.dispatchEvent(GameEvent.LandRefresh, slot.landId);
+            }
+        }
+
+        if (changed) farm.XianLand.save();
+    }
+
+    private rollOfflineBonus(now: number, matureAt: number, cfg: PlantRecord): number {
+        const minutes = Math.floor(Math.max(0, now - matureAt) / 60);
+        const cap = this.getBaseYield(cfg);
+        let bonus = 0;
+        for (let i = 0; i < minutes && bonus < cap; i++) {
+            if (Math.random() < OFFLINE_BONUS_RATE) bonus++;
+        }
+        return bonus;
+    }
+
+    private makeMature(slot: ILandSlot, bonus: number): void {
+        slot.status = LandStatus.MATURE;
+        slot.offlineBonusCount = Math.max(slot.offlineBonusCount, bonus);
+    }
+
+    private forceMatureLand(landId: number): boolean {
+        const farm = smc.farm;
+        if (!farm) return false;
+
+        const slot = farm.XianLand.getSlot(landId);
+        if (!slot || slot.status !== LandStatus.PLANTED) return false;
+
+        const cfg = TablePlant.get(slot.plantId);
+        if (!cfg) return false;
+
+        slot.startTime = this.now() - cfg.growTime;
+        this.makeMature(slot, slot.offlineBonusCount);
+        return true;
+    }
+
+    private tryLevelUp(): void {
+        const farm = smc.farm;
+        if (!farm) return;
+
+        let changed = false;
+        let next = TableRoleExp.get(farm.XianUser.level + 1);
+        while (next && farm.XianUser.exp >= next.needExp) {
+            farm.XianUser.level = next.level;
+            changed = true;
+            next = TableRoleExp.get(farm.XianUser.level + 1);
+        }
+
+        if (changed) {
+            oops.message.dispatchEvent(GameEvent.RoleLevelUp, farm.XianUser.level);
+            oops.message.dispatchEvent(GameEvent.FloatingTip, "Realm breakthrough");
+        }
+    }
+
+    private getBaseYield(cfg: PlantRecord): number {
+        return Math.max(1, cfg.baseYield || 1);
+    }
+
+    private saveGameState(): void {
+        const farm = smc.farm;
+        if (!farm) return;
+        this.saveOfflineTimestamp(this.now());
+        farm.XianUser.save();
+        farm.XianLand.save();
+    }
+
+    private saveOfflineTimestamp(now: number): void {
+        const farm = smc.farm;
+        if (!farm) return;
+        farm.XianUser.lastOfflineTime = now;
+        farm.XianUser.save();
+    }
+
+    private now(): number {
+        return Math.floor(Date.now() / 1000);
     }
 
     private ensureOrders(): void {

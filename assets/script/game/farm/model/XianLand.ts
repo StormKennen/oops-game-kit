@@ -15,19 +15,33 @@ export interface ILandSlot {
     status: LandStatus;
     plantId: number;
     startTime: number;
+    offlineBonusCount: number;
 }
 
 function isLandStatus(value: unknown): value is LandStatus {
     return value === LandStatus.EMPTY || value === LandStatus.PLANTED || value === LandStatus.MATURE;
 }
 
-function isLandSlot(value: unknown): value is ILandSlot {
+function isLandSlot(value: unknown): value is Partial<ILandSlot> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
     const slot = value as Partial<ILandSlot>;
-    return typeof slot.landId === "number"
+    const hasRequired = typeof slot.landId === "number"
         && isLandStatus(slot.status)
         && typeof slot.plantId === "number"
         && typeof slot.startTime === "number";
+    if (!hasRequired) return false;
+    if (slot.offlineBonusCount !== undefined && typeof slot.offlineBonusCount !== "number") return false;
+    return true;
+}
+
+function normalizeSlot(slot: Partial<ILandSlot>): ILandSlot {
+    return {
+        landId: slot.landId ?? 0,
+        status: slot.status ?? LandStatus.EMPTY,
+        plantId: slot.plantId ?? 0,
+        startTime: slot.startTime ?? 0,
+        offlineBonusCount: slot.offlineBonusCount ?? 0,
+    };
 }
 
 @ecs.register('XianLand')
@@ -46,6 +60,7 @@ export class XianLandComp extends ecs.Comp {
                 status: LandStatus.EMPTY,
                 plantId: 0,
                 startTime: 0,
+                offlineBonusCount: 0,
             });
         }
     }
@@ -64,7 +79,7 @@ export class XianLandComp extends ecs.Comp {
         try {
             const parsed: unknown = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length === LAND_COUNT && parsed.every(isLandSlot)) {
-                this.slots = parsed;
+                this.slots = parsed.map(normalizeSlot);
                 return;
             }
         } catch (_) {
