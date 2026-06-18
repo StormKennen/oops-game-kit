@@ -1,23 +1,35 @@
-import { ecs } from "db://oops-framework/libs/ecs/ECS";
 import { oops } from "db://oops-framework/core/Oops";
+import { ecs } from "db://oops-framework/libs/ecs/ECS";
+import { GameStorageConfig } from "../../common/config/GameStorageConfig";
 
-const STORAGE_KEY_USER = "xian_user";
+export interface XianBag {
+    [plantId: number]: number;
+}
 
 export interface IXianUserData {
     spiritStone: number;
     exp: number;
-    bag: { [plantId: number]: number };
+    bag: XianBag;
 }
 
-/** 修士属性数据组件 */
+function isNumberRecord(value: unknown): value is XianBag {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    return Object.values(value).every(v => typeof v === "number");
+}
+
+function isUserData(value: unknown): value is IXianUserData {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    const data = value as Partial<IXianUserData>;
+    return typeof data.spiritStone === "number"
+        && typeof data.exp === "number"
+        && isNumberRecord(data.bag);
+}
+
 @ecs.register('XianUser')
 export class XianUserComp extends ecs.Comp {
-    /** 灵石 */
     spiritStone: number = 1000;
-    /** 修仙阅历 */
     exp: number = 0;
-    /** 灵物背包 { plantId: count } */
-    bag: { [plantId: number]: number } = {};
+    bag: XianBag = {};
 
     reset() {
         this.spiritStone = 1000;
@@ -25,28 +37,27 @@ export class XianUserComp extends ecs.Comp {
         this.bag = {};
     }
 
-    /** 从本地存储恢复 */
     load(): void {
-        const raw = oops.storage.get(STORAGE_KEY_USER);
-        if (raw) {
-            try {
-                const d: IXianUserData = JSON.parse(raw);
-                this.spiritStone = d.spiritStone ?? 1000;
-                this.exp = d.exp ?? 0;
-                this.bag = d.bag ?? {};
-            } catch (_) {
-                // 数据损坏则使用默认值
-            }
+        const raw = oops.storage.get(GameStorageConfig.XianUser);
+        if (!raw) return;
+
+        try {
+            const parsed: unknown = JSON.parse(raw);
+            if (!isUserData(parsed)) return;
+            this.spiritStone = parsed.spiritStone;
+            this.exp = parsed.exp;
+            this.bag = parsed.bag;
+        } catch (_) {
+            this.reset();
         }
     }
 
-    /** 持久化到本地存储 */
     save(): void {
-        const d: IXianUserData = {
+        const data: IXianUserData = {
             spiritStone: this.spiritStone,
             exp: this.exp,
             bag: this.bag,
         };
-        oops.storage.set(STORAGE_KEY_USER, JSON.stringify(d));
+        oops.storage.set(GameStorageConfig.XianUser, JSON.stringify(data));
     }
 }

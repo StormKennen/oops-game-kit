@@ -1,17 +1,15 @@
-import { ecs } from "db://oops-framework/libs/ecs/ECS";
 import { oops } from "db://oops-framework/core/Oops";
+import { ecs } from "db://oops-framework/libs/ecs/ECS";
+import { GameStorageConfig } from "../../common/config/GameStorageConfig";
 
-const STORAGE_KEY_LAND = "xian_land";
 const LAND_COUNT = 6;
 
-/** 单块土地状态枚举 */
 export enum LandStatus {
     EMPTY = 0,
     PLANTED = 1,
     MATURE = 2,
 }
 
-/** 单块土地数据 */
 export interface ILandSlot {
     landId: number;
     status: LandStatus;
@@ -19,17 +17,27 @@ export interface ILandSlot {
     startTime: number;
 }
 
-/** 灵田状态数据组件 */
+function isLandStatus(value: unknown): value is LandStatus {
+    return value === LandStatus.EMPTY || value === LandStatus.PLANTED || value === LandStatus.MATURE;
+}
+
+function isLandSlot(value: unknown): value is ILandSlot {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    const slot = value as Partial<ILandSlot>;
+    return typeof slot.landId === "number"
+        && isLandStatus(slot.status)
+        && typeof slot.plantId === "number"
+        && typeof slot.startTime === "number";
+}
+
 @ecs.register('XianLand')
 export class XianLandComp extends ecs.Comp {
     slots: ILandSlot[] = [];
 
     reset() {
-        this.slots = [];
         this.initSlots();
     }
 
-    /** 初始化 6 块土地 */
     initSlots(): void {
         this.slots = [];
         for (let i = 1; i <= LAND_COUNT; i++) {
@@ -46,25 +54,26 @@ export class XianLandComp extends ecs.Comp {
         return this.slots.find(s => s.landId === landId);
     }
 
-    /** 从本地存储恢复 */
     load(): void {
-        const raw = oops.storage.get(STORAGE_KEY_LAND);
-        if (raw) {
-            try {
-                const arr: ILandSlot[] = JSON.parse(raw);
-                if (Array.isArray(arr) && arr.length === LAND_COUNT) {
-                    this.slots = arr;
-                    return;
-                }
-            } catch (_) {
-                // ignore
+        const raw = oops.storage.get(GameStorageConfig.XianLand);
+        if (!raw) {
+            this.initSlots();
+            return;
+        }
+
+        try {
+            const parsed: unknown = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length === LAND_COUNT && parsed.every(isLandSlot)) {
+                this.slots = parsed;
+                return;
             }
+        } catch (_) {
+            // Fall through to default state.
         }
         this.initSlots();
     }
 
-    /** 持久化到本地存储 */
     save(): void {
-        oops.storage.set(STORAGE_KEY_LAND, JSON.stringify(this.slots));
+        oops.storage.set(GameStorageConfig.XianLand, JSON.stringify(this.slots));
     }
 }

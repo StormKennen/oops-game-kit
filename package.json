@@ -9,5 +9,12 @@
   "description": "游戏项目模板",
   "name": "oops-game-kit",
   "uuid": "00d7d957-a3e8-4ad6-80f4-2fcfb235bca4",
-  "version": "3.6.3"
+  "version": "3.6.3",
+  "packageManager": "pnpm@9.15.1+sha512.1acb565e6193efbebda772702950469150cf12bcc764262e7587e71d19dc98a423dff9536e57ea44c49bdf790ff694e83c27be5faa23d67e0c033b583be4bfcf",
+  "devDependencies": {
+    "typescript": "5.3.3"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.check.json --noEmit"
+  }
 }

@@ -4,13 +4,12 @@ import { LayerType } from "db://oops-framework/core/gui/layer/LayerEnum";
 import { oops } from "db://oops-framework/core/Oops";
 import { ecs } from "db://oops-framework/libs/ecs/ECS";
 import { CCView } from "db://oops-framework/module/common/CCView";
-import { Farm } from "../Farm";
 import { GameEvent } from "../../common/config/GameEvent";
 import { FarmController, IActiveOrder } from "../controller/FarmController";
+import { Farm } from "../Farm";
 
 const { ccclass } = _decorator;
 
-/** 宗门悬赏榜弹窗 */
 @ccclass('ZongMenOrderViewComp')
 @ecs.register('ZongMenOrderView', false)
 @gui.register('ZongMenOrderView', { layer: LayerType.Dialog, prefab: "gui/farm/order" })
@@ -27,36 +26,28 @@ export class ZongMenOrderViewComp extends CCView<Farm> {
         oops.message.off(GameEvent.UserDataChanged, this.onUserDataChanged, this);
     }
 
-    private onOrderRefresh() {
+    private onOrderRefresh(_event: string, _args: unknown) {
         this.refreshOrders();
     }
 
-    private onUserDataChanged() {
+    private onUserDataChanged(_event: string, _args: unknown) {
         this.refreshOrders();
     }
 
-    /** 渲染当前订单列表 */
     private refreshOrders(): void {
-        const ctrl = FarmController.inst;
-        if (!ctrl) return;
         const user = this.entity?.XianUser;
         if (!user) return;
 
-        for (let i = 0; i < ctrl.activeOrders.length; i++) {
-            const order: IActiveOrder = ctrl.activeOrders[i];
+        const orders: IActiveOrder[] = FarmController.inst.getActiveOrders();
+        for (const order of orders) {
             const have = user.bag[order.requirePlantId] || 0;
             const canSubmit = have >= order.requireCount;
-            // UI 节点绑定将在 Prefab 中完成
-            // e.g. orderNode.getChildByName("btnSubmit").getComponent(Button).interactable = canSubmit;
             void canSubmit;
         }
     }
 
-    /** 交付按钮点击 */
     onSubmitClick(orderId: number): void {
-        const ctrl = FarmController.inst;
-        if (!ctrl) return;
-        ctrl.submitOrder(orderId);
+        FarmController.inst.submitOrder(orderId);
     }
 
     reset() {

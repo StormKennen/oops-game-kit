@@ -6,10 +6,11 @@ import { ecs } from '../../extensions/oops-plugin-framework/assets/libs/ecs/ECS'
 import { Account } from './game/account/Account';
 import { smc } from './game/common/SingletonModuleComp';
 import { UIConfigData } from './game/common/config/GameUIConfig';
-import { Initialize } from './game/initialize/Initialize';
 import { Farm } from './game/farm/Farm';
+import { FarmController } from './game/farm/controller/FarmController';
+import { Initialize } from './game/initialize/Initialize';
 
-const { ccclass, property } = _decorator;
+const { ccclass } = _decorator;
 
 @ccclass('Main')
 export class Main extends Root {
@@ -21,9 +22,14 @@ export class Main extends Root {
         smc.initialize = ecs.getEntity<Initialize>(Initialize);
         smc.account = ecs.getEntity<Account>(Account);
         smc.farm = ecs.getEntity<Farm>(Farm);
+        FarmController.inst.initialize();
     }
 
     protected initGui() {
         oops.gui.init(UIConfigData);
+    }
+
+    update(dt: number) {
+        FarmController.inst.update(dt);
     }
 }
