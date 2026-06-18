@@ -8,6 +8,7 @@ import { smc } from './game/common/SingletonModuleComp';
 import { UIConfigData } from './game/common/config/GameUIConfig';
 import { Farm } from './game/farm/Farm';
 import { FarmController } from './game/farm/controller/FarmController';
+import { XianChatManager } from './game/farm/controller/XianChatManager';
 import { Initialize } from './game/initialize/Initialize';
 
 const { ccclass } = _decorator;
@@ -23,6 +24,7 @@ export class Main extends Root {
         smc.account = ecs.getEntity<Account>(Account);
         smc.farm = ecs.getEntity<Farm>(Farm);
         FarmController.inst.initialize();
+        XianChatManager.inst.initialize();
     }
 
     protected initGui() {
@@ -31,9 +33,11 @@ export class Main extends Root {
 
     protected onDestroy() {
         FarmController.inst.shutdown();
+        XianChatManager.inst.shutdown();
     }
 
     update(dt: number) {
         FarmController.inst.update(dt);
+        XianChatManager.inst.update(dt);
     }
 }
