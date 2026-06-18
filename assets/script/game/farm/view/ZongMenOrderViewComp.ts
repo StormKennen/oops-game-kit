@@ -50,6 +50,10 @@ export class ZongMenOrderViewComp extends CCView<Farm> {
         FarmController.inst.submitOrder(orderId);
     }
 
+    onRefreshOrderClick(orderId?: number): void {
+        FarmController.inst.refreshOrdersWithStone(orderId);
+    }
+
     reset() {
         this.node.destroy();
     }

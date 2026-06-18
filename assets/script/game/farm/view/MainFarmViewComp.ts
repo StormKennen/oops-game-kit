@@ -22,20 +22,30 @@ export class MainFarmViewComp extends CCView<Farm> {
     @property(Label)
     labelExp: Label | null = null;
 
+    @property(Label)
+    labelRealm: Label | null = null;
+
     start() {
         this.refreshUserInfo();
         this.refreshAllLands();
         oops.message.on(GameEvent.UserDataChanged, this.onUserDataChanged, this);
+        oops.message.on(GameEvent.RoleLevelUp, this.onRoleLevelUp, this);
         oops.message.on(GameEvent.LandRefresh, this.onLandRefresh, this);
     }
 
     protected onDestroy() {
         oops.message.off(GameEvent.UserDataChanged, this.onUserDataChanged, this);
+        oops.message.off(GameEvent.RoleLevelUp, this.onRoleLevelUp, this);
         oops.message.off(GameEvent.LandRefresh, this.onLandRefresh, this);
     }
 
     private onUserDataChanged(_event: string, _args: unknown) {
         this.refreshUserInfo();
+    }
+
+    private onRoleLevelUp(_event: string, _args: unknown) {
+        this.refreshUserInfo();
+        this.refreshAllLands();
     }
 
     private onLandRefresh(_event: string, landId: unknown) {
@@ -48,6 +58,7 @@ export class MainFarmViewComp extends CCView<Farm> {
         if (!user) return;
         if (this.labelStone) this.labelStone.string = `\u7075\u77f3: ${user.spiritStone}`;
         if (this.labelExp) this.labelExp.string = `\u9605\u5386: ${user.exp}`;
+        if (this.labelRealm) this.labelRealm.string = `${FarmController.inst.getRoleTitle()} Lv.${user.level}`;
     }
 
     private refreshAllLands(): void {
@@ -63,6 +74,8 @@ export class MainFarmViewComp extends CCView<Farm> {
         if (!land) return;
         const slot = land.getSlot(landId);
         if (!slot) return;
+        const unlocked = landId <= FarmController.inst.getMaxLandCount();
+        void unlocked;
     }
 
     onLandClick(landId: number, selectedPlantId: number): void {
@@ -81,6 +94,14 @@ export class MainFarmViewComp extends CCView<Farm> {
             default:
                 break;
         }
+    }
+
+    onSpeedUpLandClick(landId: number): void {
+        FarmController.inst.speedUpLand(landId);
+    }
+
+    onSpeedUpAllClick(): void {
+        FarmController.inst.speedUpAllLands();
     }
 
     reset() {

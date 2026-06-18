@@ -29,6 +29,10 @@ export class Main extends Root {
         oops.gui.init(UIConfigData);
     }
 
+    protected onDestroy() {
+        FarmController.inst.shutdown();
+    }
+
     update(dt: number) {
         FarmController.inst.update(dt);
     }
