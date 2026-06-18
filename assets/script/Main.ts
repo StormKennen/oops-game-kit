@@ -1,9 +1,3 @@
-/*
- * @Author: dgflash
- * @Date: 2021-07-03 16:13:17
- * @LastEditors: dgflash
- * @LastEditTime: 2022-08-05 18:25:56
- */
 import { _decorator, profiler } from 'cc';
 import { DEBUG } from 'cc/env';
 import { oops } from '../../extensions/oops-plugin-framework/assets/core/Oops';
@@ -12,9 +6,11 @@ import { ecs } from '../../extensions/oops-plugin-framework/assets/libs/ecs/ECS'
 import { Account } from './game/account/Account';
 import { smc } from './game/common/SingletonModuleComp';
 import { UIConfigData } from './game/common/config/GameUIConfig';
+import { Farm } from './game/farm/Farm';
+import { FarmController } from './game/farm/controller/FarmController';
 import { Initialize } from './game/initialize/Initialize';
 
-const { ccclass, property } = _decorator;
+const { ccclass } = _decorator;
 
 @ccclass('Main')
 export class Main extends Root {
@@ -25,13 +21,15 @@ export class Main extends Root {
     protected run() {
         smc.initialize = ecs.getEntity<Initialize>(Initialize);
         smc.account = ecs.getEntity<Account>(Account);
+        smc.farm = ecs.getEntity<Farm>(Farm);
+        FarmController.inst.initialize();
     }
 
     protected initGui() {
         oops.gui.init(UIConfigData);
     }
 
-    // protected initEcsSystem() {
-    //     oops.ecs.add(new EcsInitializeSystem());
-    // }
+    update(dt: number) {
+        FarmController.inst.update(dt);
+    }
 }

@@ -1,22 +1,22 @@
-/*
- * @Date: 2021-08-12 09:33:37
- * @LastEditors: dgflash
- * @LastEditTime: 2023-02-15 09:38:36
- */
-
 import { LayerType } from "db://oops-framework/core/gui/layer/LayerEnum";
 import { UIConfig } from "db://oops-framework/core/gui/layer/UIConfig";
 
-/** 界面唯一标识（方便服务器通过编号数据触发界面打开） */
+/** 界面唯一标识 */
 export enum UIID {
-    /** 提示弹出窗口 */
+    /** 提示弹窗 */
     Alert,
-    /** 确认弹出窗口 */
+    /** 确认弹窗 */
     Confirm,
+    /** 主农场界面 */
+    Farm,
+    /** 宗门订单弹窗 */
+    ZongMenOrder,
 }
 
-/** 打开界面方式的配置数据 */
+/** 打开界面的配置数据 */
 export var UIConfigData: { [key: number]: UIConfig } = {
     [UIID.Alert]: { layer: LayerType.Dialog, prefab: "common/prefab/alert" },
     [UIID.Confirm]: { layer: LayerType.Dialog, prefab: "common/prefab/confirm" },
+    [UIID.Farm]: { layer: LayerType.UI, prefab: "gui/farm/farm" },
+    [UIID.ZongMenOrder]: { layer: LayerType.Dialog, prefab: "gui/farm/order" },
 }
